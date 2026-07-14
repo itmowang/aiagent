@@ -23,13 +23,6 @@ export function createAgent(options: AgentOptions) {
     async function run(input: string) {
         // thinking
         status = "thinking";
-        // 调用memory
-        // const memories = memory.all();
-
-        // if (memories.length > 0) {
-        //     const memoryText = memories.map(item => `${item.key}: ${item.value}`).join("\n");
-        //     conversation.addSystem(`用户记忆${memoryText}`)
-        // }
         //  保存用户信息
         conversation.addUser(input);
         // 提取新的用户记忆

@@ -33,7 +33,7 @@ const memoryextact = `
 - 一次性需求
 `
 
-export function createMemoryExtactor(llm: LLM) {
+export function createMemoryExtractor(llm: LLM) {
     async function extract(message: string): Promise<MemoryExtractor []> {
         const response = await llm.chat({
             messages: [
