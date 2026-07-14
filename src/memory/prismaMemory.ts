@@ -12,7 +12,7 @@ export function createPrismaMemory(options: PrismaOptions): Memory {
         async set(key: string, value: string) {
             await prisma.memory.upsert({
                 where: {
-                    userId: {
+                    userId_key: {
                         userId,
                         key
                     }

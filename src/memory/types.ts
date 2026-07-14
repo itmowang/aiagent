@@ -7,8 +7,8 @@ export interface MemoryItem {
 
 export interface Memory {
     set(key: string, value: string): void;
-    get(key: string): MemoryItem | undefined;
-    all(): MemoryItem[];
-    clear(): void;
+    get(key: string): Promise<MemoryItem|undefined>;
+    all(): Promise<MemoryItem[]>;
+    clear(): Promise<void>
 }
 
