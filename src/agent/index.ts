@@ -2,7 +2,7 @@ import type { LLM } from "../llm/types";
 import type { Conversation } from "../conversation";
 import type { ToolRuntime } from "../runtime";
 import type { ToolRegistry } from "../tool";
-import type { Memory } from "../memory";
+import type { Memory, MemoryExtractor } from "../memory";
 
 interface AgentOptions {
     llm: LLM;
@@ -10,27 +10,41 @@ interface AgentOptions {
     runtime: ToolRuntime;
     registry: ToolRegistry;
     memory: Memory;
+    extractor: MemoryExtractor;
 }
 
 
 export function createAgent(options: AgentOptions) {
-    const { llm, conversation, runtime, registry, memory } = options;
+    const { llm, conversation, runtime, registry, memory,extractor } = options;
 
     let status = "idle";
 
 
-    async function run(input: string) { 
+    async function run(input: string) {
         // thinking
         status = "thinking";
-         // 调用memory
-        const memories = memory.all();
+        // 调用memory
+        // const memories = memory.all();
 
-        if(memories.length>0){
-            const memoryText = memories .map(item => `${item.key}: ${item.value}`).join("\n");
-            conversation.addSystem(`用户记忆${memoryText}`)
-        }
-        //  用户发起
+        // if (memories.length > 0) {
+        //     const memoryText = memories.map(item => `${item.key}: ${item.value}`).join("\n");
+        //     conversation.addSystem(`用户记忆${memoryText}`)
+        // }
+        //  保存用户信息
         conversation.addUser(input);
+        // 提取新的用户记忆
+        const extractedMemories = await extractor.extract(input);
+        // 写入memory
+        for (const item of extractedMemories) {
+            await memory.set(item.key,item.value)            
+        }
+        // 读取已有的memory
+        const storedMemories = await memory.all();
+
+        if(storedMemories.length>0){
+            const memoryText = storedMemories.map(item=>`${item.key}:${item.value}`).join("\n")
+            conversation.addSystem(`用户长期记忆:\n ${memoryText}`)
+        }
 
         // 核心开始轮询
         while (true) {
