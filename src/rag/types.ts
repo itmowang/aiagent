@@ -12,3 +12,4 @@ export interface VectorStore {
     search(vector: number[], limit: number): Promise<Document[]>
 }
 
+
