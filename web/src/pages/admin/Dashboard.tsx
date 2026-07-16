@@ -3,9 +3,7 @@ import { Card, Col, Row, Statistic, Table, Tag } from "antd";
 import {
   TeamOutlined,
   DatabaseOutlined,
-  ApiOutlined,
   ThunderboltOutlined,
-  BulbOutlined,
   ProfileOutlined,
 } from "@ant-design/icons";
 import { listUsers } from "@/api/users";
@@ -23,12 +21,12 @@ export default function DashboardPage() {
   return (
     <div>
       <Row gutter={16}>
-        <Col span={4}>
+        <Col span={6}>
           <Card className="stat-card">
             <Statistic title="用户总数" value={users.length} prefix={<TeamOutlined />} />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={6}>
           <Card className="stat-card">
             <Statistic
               title="Agent 记忆"
@@ -37,16 +35,7 @@ export default function DashboardPage() {
             />
           </Card>
         </Col>
-        <Col span={4}>
-          <Card className="stat-card">
-            <Statistic
-              title="技能"
-              value={config?.skills.length ?? 0}
-              prefix={<BulbOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={4}>
+        <Col span={6}>
           <Card className="stat-card">
             <Statistic
               title="模型"
@@ -55,21 +44,12 @@ export default function DashboardPage() {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={6}>
           <Card className="stat-card">
             <Statistic
               title="RAG 文档"
               value={config?.ragDocs.length ?? 0}
               prefix={<DatabaseOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={4}>
-          <Card className="stat-card">
-            <Statistic
-              title="MCP 服务"
-              value={config?.mcpServers.length ?? 0}
-              prefix={<ApiOutlined />}
             />
           </Card>
         </Col>

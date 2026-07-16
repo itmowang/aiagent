@@ -64,25 +64,6 @@ export default function ChatDefaultsPage() {
         <Form.Item name="enableRag" label="启用 RAG 检索" valuePropName="checked">
           <Switch />
         </Form.Item>
-        <Form.Item name="enabledSkillIds" label="默认启用技能">
-          <Select
-            mode="multiple"
-            allowClear
-            placeholder="选择默认启用的技能"
-            options={config.skills.map((s) => ({ value: s.id, label: s.name }))}
-          />
-        </Form.Item>
-        <Form.Item name="enabledMcpIds" label="默认启用 MCP 服务">
-          <Select
-            mode="multiple"
-            allowClear
-            placeholder="选择默认启用的 MCP 服务"
-            options={config.mcpServers.map((m) => ({
-              value: m.id,
-              label: m.name,
-            }))}
-          />
-        </Form.Item>
         <Form.Item>
           <Button type="primary" onClick={onSave}>
             保存设置

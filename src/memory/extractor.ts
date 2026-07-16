@@ -1,12 +1,12 @@
 import type { LLM } from "../llm/types";
 
-export  interface MemoryExtractor  {
-   extract(
-        input:string
-    ):Promise<{
-        key:string;
-        value:string;
-    }[]>;
+export interface ExtractedMemory {
+    key: string;
+    value: string;
+}
+
+export interface MemoryExtractor {
+    extract(input: string): Promise<ExtractedMemory[]>;
 }
 
 const memoryextact = `
@@ -33,8 +33,8 @@ const memoryextact = `
 - 一次性需求
 `
 
-export function createMemoryExtractor(llm: LLM) {
-    async function extract(message: string): Promise<MemoryExtractor []> {
+export function createMemoryExtractor(llm: LLM): MemoryExtractor {
+    async function extract(message: string): Promise<ExtractedMemory[]> {
         const response = await llm.chat({
             messages: [
                 {

@@ -21,9 +21,8 @@
     "declarationMap": true,
     "incremental": true,
     "removeComments": false,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src"],

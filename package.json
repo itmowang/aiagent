@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "server": "tsx src/server/index.ts",
+    "server:dev": "tsx watch src/server/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -11,10 +13,13 @@
   "license": "ISC",
   "packageManager": "pnpm@10.11.0",
   "dependencies": {
+    "@hono/node-server": "^2.0.9",
     "@prisma/adapter-mariadb": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@qdrant/js-client-rest": "^1.18.0",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
+    "hono": "^4.12.30",
     "mysql2": "^3.22.6",
     "openai": "^6.46.0",
     "prisma": "^7.8.0",
@@ -22,6 +27,7 @@
     "yaml": "2.8.1"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
     "@types/node": "^26.1.1"
   }
 }

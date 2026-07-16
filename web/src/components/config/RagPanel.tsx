@@ -5,9 +5,12 @@ import {
   Empty,
   Input,
   List,
+  Modal,
   Space,
+  Switch,
   Table,
   Tag,
+  Tooltip,
   Upload,
   App as AntApp,
   Popconfirm,
@@ -18,9 +21,19 @@ import {
   DeleteOutlined,
   SearchOutlined,
   FileTextOutlined,
+  EditOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import type { UploadProps } from "antd";
-import { addRagDocs, deleteRagDoc, updateRagDoc } from "@/api/config";
+import {
+  uploadRagDocs,
+  deleteRagDoc,
+  updateRagDoc,
+  reindexRagDoc,
+  getRagDoc,
+  searchRag,
+  type RagSearchResult,
+} from "@/api/rag";
 import type { RagDocStatus, RagDocument } from "@/api/types";
 
 interface Props {
@@ -37,10 +50,19 @@ const statusTag: Record<RagDocStatus, { color: string; label: string }> = {
 
 export default function RagPanel({ docs, onChange }: Props) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<
-    { content: string; score: number; source: string }[]
-  >([]);
+  const [results, setResults] = useState<RagSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // 编辑弹窗
+  const [editing, setEditing] = useState<RagDocument | null>(null);
+  const [editFilename, setEditFilename] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editOriginalContent, setEditOriginalContent] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const { message } = AntApp.useApp();
 
   const uploadProps: UploadProps = {
@@ -49,60 +71,116 @@ export default function RagPanel({ docs, onChange }: Props) {
     showUploadList: false,
     beforeUpload: async (file, fileList) => {
       if (file !== fileList[fileList.length - 1]) return false;
-      const ext = (f: File) => f.name.split(".").pop()?.toLowerCase() ?? "txt";
-      await addRagDocs(
-        fileList.map((f) => ({
-          filename: f.name,
-          type: ext(f),
-          size: f.size,
-          collection: "product_workflow_test",
-        }))
-      );
-      message.success(`已添加 ${fileList.length} 个文档，待索引`);
-      onChange();
+      setUploading(true);
+      try {
+        const created = await uploadRagDocs(fileList as unknown as File[]);
+        const ok = created.filter((d) => d.status === "indexed").length;
+        const failed = created.filter((d) => d.status === "failed");
+        if (ok > 0) message.success(`成功索引 ${ok} 个文档`);
+        if (failed.length > 0)
+          message.warning(`${failed.length} 个文档失败：${failed[0].error ?? ""}`);
+        onChange();
+      } catch (e) {
+        message.error((e as Error).message);
+      } finally {
+        setUploading(false);
+      }
       return false;
     },
   };
 
-  // 模拟索引：真实逻辑后续接入 indexer + Qdrant
-  const runIndex = async (doc: RagDocument) => {
-    await updateRagDoc(doc.id, { status: "indexing" });
-    onChange();
-    setTimeout(async () => {
-      await updateRagDoc(doc.id, {
-        status: "indexed",
-        chunks: Math.floor(Math.random() * 40) + 5,
-      });
-      onChange();
-    }, 800);
-  };
-
-  // 模拟检索测试：真实逻辑后续接入 retriever
-  const runSearch = () => {
+  const runSearch = async () => {
     if (!query.trim()) return;
     setSearching(true);
-    setTimeout(() => {
-      const indexed = docs.filter((d) => d.status === "indexed");
-      setResults(
-        indexed.slice(0, 3).map((d, i) => ({
-          content: `[占位结果] 来自《${d.filename}》与「${query}」相关的片段 ${i + 1}。真实检索将接入 retriever + Qdrant。`,
-          score: Number((0.9 - i * 0.12).toFixed(2)),
-          source: d.filename,
-        }))
-      );
+    try {
+      setResults(await searchRag(query, 5));
+    } catch (e) {
+      message.error((e as Error).message);
+    } finally {
       setSearching(false);
-    }, 500);
+    }
+  };
+
+  const toggleEnabled = async (doc: RagDocument, enabled: boolean) => {
+    setBusyId(doc.id);
+    try {
+      await updateRagDoc(doc.id, { enabled });
+      message.success(enabled ? "已启用" : "已停用");
+      onChange();
+    } catch (e) {
+      message.error((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const reindex = async (doc: RagDocument) => {
+    setBusyId(doc.id);
+    try {
+      const r = await reindexRagDoc(doc.id);
+      if (r.status === "indexed") message.success(`重新索引完成，共 ${r.chunks} 块`);
+      else message.warning(`重新索引失败：${r.error ?? ""}`);
+      onChange();
+    } catch (e) {
+      message.error((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const openEdit = async (doc: RagDocument) => {
+    setEditing(doc);
+    setEditFilename(doc.filename);
+    setEditContent("");
+    setEditOriginalContent("");
+    setEditLoading(true);
+    try {
+      const detail = await getRagDoc(doc.id);
+      setEditContent(detail.content);
+      setEditOriginalContent(detail.content);
+    } catch (e) {
+      message.error((e as Error).message);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      const contentChanged = editContent !== editOriginalContent;
+      const r = await updateRagDoc(editing.id, {
+        filename: editFilename,
+        content: contentChanged ? editContent : undefined,
+      });
+      if (contentChanged) {
+        if (r.status === "indexed")
+          message.success(`已保存并重新索引，共 ${r.chunks} 块`);
+        else message.warning(`已保存，但重新索引失败：${r.error ?? ""}`);
+      } else {
+        message.success("已保存");
+      }
+      setEditing(null);
+      onChange();
+    } catch (e) {
+      message.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div>
       <Space style={{ marginBottom: 16 }}>
         <Upload {...uploadProps}>
-          <Button type="primary" icon={<UploadOutlined />}>
+          <Button type="primary" icon={<UploadOutlined />} loading={uploading}>
             导入文档
           </Button>
         </Upload>
-        <span style={{ color: "#999" }}>支持 .md / .txt / .pdf / .docx</span>
+        <span style={{ color: "#999" }}>
+          支持 .md / .txt（PDF/DOCX 需接入文本抽取库）
+        </span>
       </Space>
 
       <Table<RagDocument>
@@ -123,22 +201,40 @@ export default function RagPanel({ docs, onChange }: Props) {
           {
             title: "类型",
             dataIndex: "type",
-            width: 90,
+            width: 80,
             render: (v) => <Tag>{v}</Tag>,
           },
           {
             title: "大小",
             dataIndex: "size",
-            width: 110,
+            width: 90,
             render: (v: number) => `${(v / 1024).toFixed(1)} KB`,
           },
-          { title: "分块数", dataIndex: "chunks", width: 90 },
+          { title: "分块数", dataIndex: "chunks", width: 80 },
           {
             title: "状态",
             dataIndex: "status",
-            width: 110,
-            render: (s: RagDocStatus) => (
-              <Tag color={statusTag[s].color}>{statusTag[s].label}</Tag>
+            width: 100,
+            render: (s: RagDocStatus, d) =>
+              s === "failed" && d.error ? (
+                <Tooltip title={d.error}>
+                  <Tag color={statusTag[s].color}>{statusTag[s].label}</Tag>
+                </Tooltip>
+              ) : (
+                <Tag color={statusTag[s].color}>{statusTag[s].label}</Tag>
+              ),
+          },
+          {
+            title: "启用",
+            dataIndex: "enabled",
+            width: 80,
+            render: (v: boolean, d) => (
+              <Switch
+                size="small"
+                checked={v}
+                loading={busyId === d.id}
+                onChange={(checked) => toggleEnabled(d, checked)}
+              />
             ),
           },
           {
@@ -146,15 +242,26 @@ export default function RagPanel({ docs, onChange }: Props) {
             width: 160,
             render: (_, d) => (
               <Space>
-                {d.status !== "indexed" && d.status !== "indexing" && (
-                  <Button size="small" onClick={() => runIndex(d)}>
-                    索引
-                  </Button>
-                )}
+                <Tooltip title="编辑（改名 / 改正文）">
+                  <Button
+                    size="small"
+                    icon={<EditOutlined />}
+                    onClick={() => openEdit(d)}
+                  />
+                </Tooltip>
+                <Tooltip title="重新索引">
+                  <Button
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    loading={busyId === d.id}
+                    onClick={() => reindex(d)}
+                  />
+                </Tooltip>
                 <Popconfirm
-                  title="删除该文档？"
+                  title="删除该文档？将同时清除其向量"
                   onConfirm={async () => {
                     await deleteRagDoc(d.id);
+                    message.success("已删除");
                     onChange();
                   }}
                 >
@@ -197,7 +304,9 @@ export default function RagPanel({ docs, onChange }: Props) {
                   <List.Item.Meta
                     title={
                       <Space>
-                        <Tag color="blue">score {r.score}</Tag>
+                        {typeof r.score === "number" && (
+                          <Tag color="blue">score {r.score.toFixed(2)}</Tag>
+                        )}
                         <span style={{ color: "#999", fontSize: 12 }}>
                           {r.source}
                         </span>
@@ -211,6 +320,37 @@ export default function RagPanel({ docs, onChange }: Props) {
           )}
         </div>
       </Card>
+
+      <Modal
+        title="编辑文档"
+        open={!!editing}
+        onOk={saveEdit}
+        onCancel={() => setEditing(null)}
+        okText="保存"
+        cancelText="取消"
+        confirmLoading={saving}
+        width={720}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 6, color: "#666" }}>文件名</div>
+          <Input
+            value={editFilename}
+            onChange={(e) => setEditFilename(e.target.value)}
+          />
+        </div>
+        <div>
+          <div style={{ marginBottom: 6, color: "#666" }}>
+            正文（修改后保存会自动重新索引）
+          </div>
+          <Input.TextArea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            autoSize={{ minRows: 10, maxRows: 20 }}
+            disabled={editLoading}
+            placeholder={editLoading ? "加载中…" : "文档正文"}
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

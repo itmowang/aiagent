@@ -1,5 +1,5 @@
 import { QdrantClient } from '@qdrant/js-client-rest';
-import type { VectorStore, Document } from './types';
+import type { VectorStore, Document, SearchResult } from './types';
 
 interface Options {
     url: string;
@@ -39,10 +39,11 @@ export function createQdrantVectorStore(options: Options): VectorStore {
         })
     }
 
-    async function search(vector: number[], limit: number) {
+    async function search(vector: number[], limit: number, filter?: unknown): Promise<SearchResult[]> {
         const result = await client.search(options.collection, {
             vector,
-            limit
+            limit,
+            ...(filter ? { filter: filter as any } : {})
         })
         return result.map(item => ({
             id: String(item.id),
@@ -51,9 +52,17 @@ export function createQdrantVectorStore(options: Options): VectorStore {
         }))
     }
 
+    async function remove(ids: string[]) {
+        if (ids.length === 0) return;
+        await client.delete(options.collection, {
+            points: ids,
+        });
+    }
+
     return {
         init,
         add,
         search,
+        remove,
     }
 }

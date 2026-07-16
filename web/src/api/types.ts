@@ -32,16 +32,6 @@ export interface MemoryItem {
   updatedAt: number;
 }
 
-// 技能 / Skill 配置
-export interface SkillConfig {
-  id: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-  // 触发该技能的系统提示或指令
-  prompt?: string;
-}
-
 // RAG 知识库文档
 export type RagDocStatus = "pending" | "indexing" | "indexed" | "failed";
 
@@ -52,7 +42,9 @@ export interface RagDocument {
   size: number;
   chunks: number;
   status: RagDocStatus;
+  enabled: boolean;
   collection: string;
+  error?: string | null;
   createdAt: number;
 }
 
@@ -69,28 +61,12 @@ export interface ModelConfig {
   isDefault: boolean;
 }
 
-// MCP 服务器配置
-export type McpTransport = "stdio" | "sse" | "http";
-
-export interface McpServerConfig {
-  id: string;
-  name: string;
-  transport: McpTransport;
-  command?: string; // stdio
-  args?: string[];
-  url?: string; // sse / http
-  enabled: boolean;
-  autoApprove: string[];
-}
-
 // 对话默认设置（全局，新会话继承）
 export interface ChatDefaults {
   modelId: string;
   systemPrompt: string;
   enableMemory: boolean;
   enableRag: boolean;
-  enabledSkillIds: string[];
-  enabledMcpIds: string[];
 }
 
 // 聊天消息
@@ -102,11 +78,9 @@ export interface ChatMessage {
 }
 
 // 单个 Agent 的全局配置聚合（管理员在后台左侧菜单维护）。
-// 这些都是给 Agent 用的：默认记忆、知识库、技能、模型、MCP。
+// 这些都是给 Agent 用的：默认记忆、知识库、模型。
 export interface AgentConfigBundle {
   memories: MemoryItem[]; // Agent 默认记忆
-  skills: SkillConfig[];
   ragDocs: RagDocument[];
   models: ModelConfig[];
-  mcpServers: McpServerConfig[];
 }

@@ -1,0 +1,151 @@
+import { prisma } from "../lib/prisma";
+import { createOpenAILLM, type OpenAILLMConfig } from "../llm/openai";
+import { createConversation } from "../conversation";
+import { createToolRegistry } from "../tool";
+import { createToolRuntime } from "../runtime";
+import { createPrismaMemory, createMemoryExtractor } from "../memory";
+import { createAgent } from "../agent";
+import { createKnowledgeTool } from "../tool/ragTool";
+import { searchKnowledge } from "./ragService";
+
+// 根据 ModelConfig 行构造 LLM 配置
+function toLLMConfig(model: {
+    provider: string;
+    model: string;
+    baseUrl: string | null;
+    apiKey: string | null;
+    temperature: number;
+    maxTokens: number;
+}): OpenAILLMConfig {
+    const apiKey =
+        model.apiKey && model.apiKey.length > 0
+            ? model.apiKey
+            : process.env["DASHSCOPE_API_KEY"] ?? "";
+    return {
+        apiKey,
+        baseURL:
+            model.baseUrl ??
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        model: model.model,
+        temperature: model.temperature,
+        maxTokens: model.maxTokens,
+    };
+}
+
+// 解析要使用的模型：优先指定的 modelId，其次默认模型
+async function resolveModel(modelId?: string | null) {
+    if (modelId) {
+        const m = await prisma.modelConfig.findUnique({ where: { id: modelId } });
+        if (m) return m;
+    }
+    const def = await prisma.modelConfig.findFirst({
+        where: { isDefault: true },
+    });
+    if (def) return def;
+    // 兜底：任意一个
+    return prisma.modelConfig.findFirst();
+}
+
+export interface RunChatInput {
+    userId: string;
+    conversationId?: string;
+    message: string;
+    modelId?: string;
+}
+
+export interface RunChatResult {
+    conversationId: string;
+    reply: string;
+    modelId: string | null;
+}
+
+export async function runChat(input: RunChatInput): Promise<RunChatResult> {
+    const { userId, message } = input;
+
+    // 1. 找到或创建会话
+    let conversationId = input.conversationId;
+    let modelId = input.modelId ?? null;
+
+    if (conversationId) {
+        const conv = await prisma.conversation.findFirst({
+            where: { id: conversationId, userId },
+        });
+        if (!conv) throw new Error("会话不存在或无权访问");
+        modelId = modelId ?? conv.modelId;
+    } else {
+        const created = await prisma.conversation.create({
+            data: {
+                userId,
+                title: message.slice(0, 20) || "新对话",
+                modelId,
+            },
+        });
+        conversationId = created.id;
+    }
+
+    // 2. 解析模型 → 构造 LLM（模型切换的核心）
+    const model = await resolveModel(modelId);
+    if (!model) throw new Error("未配置任何模型，请先在后台添加模型");
+    const llm = createOpenAILLM(toLLMConfig(model));
+
+    // 3. 组装 agent 所需组件
+    const conversation = createConversation();
+    const registry = createToolRegistry();
+    const runtime = createToolRuntime({ conversation, registry });
+    const memory = createPrismaMemory({ userId });
+    const extractor = createMemoryExtractor(llm);
+
+    // 注册知识库检索工具（底层复用 RAG 服务；Qdrant 不可用时工具会返回错误，不影响对话）
+    registry.register(
+        createKnowledgeTool({
+            search: (query: string, limit = 5) => searchKnowledge(query, limit),
+        })
+    );
+
+    // 4. 预加载历史消息作为上下文
+    const history = await prisma.message.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: "asc" },
+    });
+    for (const m of history) {
+        if (m.role === "user") conversation.addUser(m.content);
+        else if (m.role === "assistant") conversation.addAssistant(m.content);
+        else if (m.role === "system") conversation.addSystem(m.content);
+    }
+
+    // 注入 Agent 全局记忆（对所有用户生效），与用户个人记忆一起作为上下文
+    const agentMemories = await prisma.agentMemory.findMany({
+        orderBy: { createdAt: "asc" },
+    });
+    if (agentMemories.length > 0) {
+        const text = agentMemories
+            .map((m) => `${m.key}:${m.value}`)
+            .join("\n");
+        conversation.addSystem(`Agent 全局记忆:\n${text}`);
+    }
+
+    // 5. 运行 agent
+    const agent = createAgent({
+        llm,
+        conversation,
+        runtime,
+        registry,
+        memory,
+        extractor,
+    });
+    const reply = await agent.run(message);
+
+    // 6. 持久化本轮用户消息与助手回复
+    await prisma.message.createMany({
+        data: [
+            { conversationId, role: "user", content: message },
+            { conversationId, role: "assistant", content: reply ?? "" },
+        ],
+    });
+    await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { updatedAt: new Date(), modelId },
+    });
+
+    return { conversationId, reply: reply ?? "", modelId: model.id };
+}

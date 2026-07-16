@@ -1,7 +1,6 @@
 import React, {
   createContext,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -19,11 +18,10 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<AuthSession | null>(null);
-
-  useEffect(() => {
-    setSession(authApi.currentSession());
-  }, []);
+  // 同步从 localStorage 恢复登录态，避免刷新时首帧被路由守卫重定向到登录页
+  const [session, setSession] = useState<AuthSession | null>(() =>
+    authApi.currentSession()
+  );
 
   const value = useMemo<AuthContextValue>(
     () => ({

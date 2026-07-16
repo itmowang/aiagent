@@ -4,7 +4,7 @@ export function createMemory(): Memory {
     let store: MemoryItem[] = [];
 
     return {
-        set(key: string, value: string) {
+        async set(key: string, value: string) {
             const exist = store.find(item => item.key === key)
             if (exist) {
                 exist.value = value;
@@ -16,13 +16,13 @@ export function createMemory(): Memory {
                 createdAt: Date.now()
             })
         },
-        get(key: string) {
+        async get(key: string) {
             return store.find(item => item.key === key);
         },
-        all() {
+        async all() {
             return [...store]
         },
-        clear() {
+        async clear() {
             store = []
         }
     }

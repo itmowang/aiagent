@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Input, Avatar, Dropdown, Drawer, App as AntApp } from "antd";
+import {
+  Button,
+  Input,
+  Avatar,
+  Dropdown,
+  Drawer,
+  Select,
+  App as AntApp,
+} from "antd";
 import {
   PlusOutlined,
   SendOutlined,
@@ -14,22 +22,17 @@ import {
   ThunderboltFilled,
 } from "@ant-design/icons";
 import { useAuth } from "@/store/AuthContext";
-import { read, write, uid } from "@/api/db";
-import { getAgentConfig, getChatDefaults, getUserMemory } from "@/api/config";
-import type {
-  AgentConfigBundle,
-  ChatDefaults,
-  ChatMessage,
-  MemoryItem,
-} from "@/api/types";
+import { getUserMemory } from "@/api/config";
+import {
+  listConversations,
+  getConversation,
+  deleteConversation,
+  sendChat,
+  type ConversationSummary,
+} from "@/api/chat";
+import { http } from "@/api/http";
+import type { ChatMessage, MemoryItem, ModelConfig } from "@/api/types";
 import MemoryPanel from "@/components/config/MemoryPanel";
-
-interface Session {
-  id: string;
-  title: string;
-  messages: ChatMessage[];
-  createdAt: number;
-}
 
 const SUGGESTIONS = [
   "帮我总结一下这份产品文档",
@@ -42,114 +45,109 @@ export default function ChatPage() {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const userId = user!.id;
-  const storeKey = `sessions:${userId}`;
+  const { message } = AntApp.useApp();
 
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
-  const [config, setConfig] = useState<AgentConfigBundle | null>(null);
-  const [defaults, setDefaults] = useState<ChatDefaults | null>(null);
   const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [models, setModels] = useState<ModelConfig[]>([]);
+  const [modelId, setModelId] = useState<string | undefined>(undefined);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const loadMemory = useCallback(async () => {
     setMemories(await getUserMemory(userId));
   }, [userId]);
 
+  const loadConversations = useCallback(async () => {
+    setConversations(await listConversations());
+  }, []);
+
   useEffect(() => {
-    setSessions(read<Session[]>(storeKey, []));
     (async () => {
-      setConfig(await getAgentConfig());
-      setDefaults(await getChatDefaults());
+      await loadConversations();
       loadMemory();
+      try {
+        const ms = await http.get<ModelConfig[]>("/api/models");
+        setModels(ms);
+        const def = ms.find((m) => m.isDefault) ?? ms[0];
+        setModelId(def?.id);
+      } catch {
+        // 模型列表加载失败不阻塞聊天
+      }
     })();
   }, [userId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeId, sessions, sending]);
+  }, [activeId, messages, sending]);
 
-  const persist = (next: Session[]) => {
-    setSessions(next);
-    write(storeKey, next);
+  const openConversation = async (id: string) => {
+    setActiveId(id);
+    const detail = await getConversation(id);
+    setMessages(detail.messages);
+    if (detail.modelId) setModelId(detail.modelId);
   };
-
-  const active = sessions.find((s) => s.id === activeId) ?? null;
 
   const newSession = () => {
-    const s: Session = {
-      id: uid(),
-      title: "新对话",
-      messages: [],
-      createdAt: Date.now(),
-    };
-    persist([s, ...sessions]);
-    setActiveId(s.id);
+    setActiveId(null);
+    setMessages([]);
   };
 
-  const deleteSession = (id: string) => {
-    const next = sessions.filter((s) => s.id !== id);
-    persist(next);
-    if (activeId === id) setActiveId(next[0]?.id ?? null);
+  const removeConversation = async (id: string) => {
+    await deleteConversation(id);
+    if (activeId === id) newSession();
+    loadConversations();
   };
 
-  const doSend = (text: string) => {
+  const doSend = async (text: string) => {
     text = text.trim();
     if (!text || sending) return;
-    let target = active;
-    let list = sessions;
-    if (!target) {
-      target = {
-        id: uid(),
-        title: text.slice(0, 20),
-        messages: [],
-        createdAt: Date.now(),
-      };
-      list = [target, ...sessions];
-      setActiveId(target.id);
-    }
 
     const userMsg: ChatMessage = {
-      id: uid(),
+      id: `tmp-${Date.now()}`,
       role: "user",
       content: text,
       createdAt: Date.now(),
     };
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setSending(true);
 
-    // 占位回复：真实调用后端 agent.run 的逻辑将后续接入
-    const reply: ChatMessage = {
-      id: uid(),
-      role: "assistant",
-      content:
-        "（占位回复）后端对话逻辑将在下一步接入 —— 会调用单 Agent 的 run，结合默认设置：Agent 记忆、用户个人记忆、RAG、技能与所选模型。",
-      createdAt: Date.now() + 1,
-    };
-
-    const updated = list.map((s) =>
-      s.id === target!.id
-        ? {
-            ...s,
-            title: s.messages.length === 0 ? text.slice(0, 20) : s.title,
-            messages: [...s.messages, userMsg],
-          }
-        : s
-    );
-    persist(updated);
-
-    setTimeout(() => {
-      const withReply = read<Session[]>(storeKey, updated).map((s) =>
-        s.id === target!.id ? { ...s, messages: [...s.messages, reply] } : s
-      );
-      persist(withReply);
+    try {
+      const res = await sendChat({
+        message: text,
+        conversationId: activeId ?? undefined,
+        modelId,
+      });
+      const reply: ChatMessage = {
+        id: `reply-${Date.now()}`,
+        role: "assistant",
+        content: res.reply,
+        createdAt: Date.now(),
+      };
+      setMessages((prev) => [...prev, reply]);
+      if (!activeId) setActiveId(res.conversationId);
+      if (res.modelId) setModelId(res.modelId);
+      loadConversations();
+      // 对话中可能抽取了新的长期记忆，刷新一下
+      loadMemory();
+    } catch (e) {
+      message.error((e as Error).message);
+      // 回滚刚插入的用户消息
+      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+      setInput(text);
+    } finally {
       setSending(false);
-    }, 800);
+    }
   };
 
-  const currentModel = config?.models.find((m) => m.id === defaults?.modelId);
+  const activeTitle =
+    conversations.find((c) => c.id === activeId)?.title ?? "新对话";
+  const currentModel = models.find((m) => m.id === modelId);
 
   return (
     <div className="chat-shell">
@@ -164,16 +162,16 @@ export default function ChatPage() {
           </Button>
         </div>
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {sessions.length === 0 && (
+          {conversations.length === 0 && (
             <div style={{ color: "#6a6a80", textAlign: "center", marginTop: 40, fontSize: 13 }}>
               暂无对话
             </div>
           )}
-          {sessions.map((s) => (
+          {conversations.map((s) => (
             <div
               key={s.id}
               className={`session-item ${s.id === activeId ? "active" : ""}`}
-              onClick={() => setActiveId(s.id)}
+              onClick={() => openConversation(s.id)}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -182,7 +180,7 @@ export default function ChatPage() {
                 <DeleteOutlined
                   onClick={(e) => {
                     e.stopPropagation();
-                    deleteSession(s.id);
+                    removeConversation(s.id);
                   }}
                   style={{ opacity: 0.5 }}
                 />
@@ -194,11 +192,25 @@ export default function ChatPage() {
 
       <div className="chat-main">
         <div className="chat-header">
-          <span className="chat-header-title">{active?.title ?? "新对话"}</span>
+          <span className="chat-header-title">{activeTitle}</span>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <span className="model-pill">
-              <ThunderboltFilled /> {currentModel?.name ?? "默认模型"}
-            </span>
+            {models.length > 0 ? (
+              <Select
+                size="small"
+                value={modelId}
+                onChange={setModelId}
+                style={{ minWidth: 180 }}
+                suffixIcon={<ThunderboltFilled />}
+                options={models.map((m) => ({
+                  value: m.id,
+                  label: `${m.name}${m.isDefault ? " · 默认" : ""}`,
+                }))}
+              />
+            ) : (
+              <span className="model-pill">
+                <ThunderboltFilled /> {currentModel?.name ?? "默认模型"}
+              </span>
+            )}
             <Dropdown
               placement="bottomRight"
               menu={{
@@ -243,7 +255,7 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {!active || active.messages.length === 0 ? (
+        {messages.length === 0 && !sending ? (
           <div className="chat-empty">
             <div className="empty-icon">
               <RobotOutlined />
@@ -266,7 +278,7 @@ export default function ChatPage() {
         ) : (
           <div className="chat-messages">
             <div className="chat-messages-inner">
-              {active.messages.map((m) => (
+              {messages.map((m) => (
                 <div key={m.id} className={`chat-row ${m.role}`}>
                   <div className={`chat-avatar ${m.role}`}>
                     {m.role === "user" ? <UserOutlined /> : <RobotOutlined />}

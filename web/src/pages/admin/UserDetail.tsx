@@ -61,7 +61,7 @@ export default function UserDetailPage() {
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="用户仅有个人 Memory 可供管理与清空，Agent 的技能 / RAG / 模型 / MCP 为全局配置。"
+          message="用户仅有个人 Memory 可供管理与清空，Agent 的 RAG / 模型 为全局配置。"
         />
         <MemoryPanel
           scope={{ kind: "user", userId }}

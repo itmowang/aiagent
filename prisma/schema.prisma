@@ -12,13 +12,111 @@ datasource db {
   provider = "mysql"
 }
 
+enum UserRole {
+  admin
+  user
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+model User {
+  id           String     @id @default(uuid())
+  username     String     @unique
+  displayName  String
+  email        String?
+  passwordHash String
+  role         UserRole   @default(user)
+  status       UserStatus @default(active)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  memories      Memory[]
+  conversations Conversation[]
+}
 
 model Memory {
-  id String @id @default(uuid())
-  userId String
-  key String
-  value String
+  id        String   @id @default(uuid())
+  userId    String
+  key       String
+  value     String   @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  @@unique([userId,key])
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId])
+}
+
+// 模型配置（切换模型的核心数据源）
+model ModelConfig {
+  id          String   @id @default(uuid())
+  name        String
+  provider    String // openai / dashscope
+  model       String // qwen-plus / gpt-4o
+  baseUrl     String?
+  apiKey      String?  @db.Text
+  temperature Float    @default(0.7)
+  maxTokens   Int      @default(2048)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// 会话
+model Conversation {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String   @default("新对话")
+  modelId   String? // 该会话使用的模型（指向 ModelConfig.id）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([userId])
+}
+
+// Agent 全局记忆（对所有用户、所有对话生效）
+model AgentMemory {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// RAG 知识库文档（全局知识库）
+model RagDocument {
+  id         String   @id @default(uuid())
+  filename   String
+  type       String // md / txt / pdf / docx
+  size       Int
+  chunks     Int      @default(0)
+  status     String   @default("pending") // pending / indexing / indexed / failed
+  enabled    Boolean  @default(true) // 是否参与检索
+  collection String
+  content    String?  @db.LongText // 原始文本，用于编辑与重新索引
+  error      String?  @db.Text
+  vectorIds  Json? // 已写入 Qdrant 的向量 id，用于删除
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// 消息
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  role           String // user / assistant / system / tool
+  content        String   @db.Text
+  toolCallId     String? // role=tool 时对应的调用 id
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
 }

@@ -1,11 +1,23 @@
+import { useCallback, useEffect, useState } from "react";
 import { Card, Spin } from "antd";
-import { useAgentConfig } from "@/hooks/useAgentConfig";
 import RagPanel from "@/components/config/RagPanel";
+import { listRagDocs } from "@/api/rag";
+import type { RagDocument } from "@/api/types";
 
 export default function RagPage() {
-  const { config, loading, reload } = useAgentConfig();
+  const [docs, setDocs] = useState<RagDocument[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (loading || !config) {
+  const reload = useCallback(async () => {
+    setDocs(await listRagDocs());
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  if (loading) {
     return (
       <div style={{ textAlign: "center", padding: 80 }}>
         <Spin />
@@ -15,7 +27,7 @@ export default function RagPage() {
 
   return (
     <Card title="RAG 知识库">
-      <RagPanel docs={config.ragDocs} onChange={reload} />
+      <RagPanel docs={docs} onChange={reload} />
     </Card>
   );
 }

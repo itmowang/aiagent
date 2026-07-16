@@ -6,10 +6,17 @@ export interface Document {
 }
 
 
+export interface SearchResult {
+    id: string;
+    content: string;
+    metadata?: Record<string, any>;
+}
+
 export interface VectorStore {
     init(): Promise<void>;
     add(docs: Document[]): Promise<void>;
-    search(vector: number[], limit: number): Promise<Document[]>
+    search(vector: number[], limit: number, filter?: unknown): Promise<SearchResult[]>;
+    remove?(ids: string[]): Promise<void>;
 }
 
 

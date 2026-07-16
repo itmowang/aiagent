@@ -1,36 +1,7 @@
 import type { Tool } from "../tool";
+import type { Message } from "../conversation";
 
-export type Message =
-    | SystemMessage
-    | UserMessage
-    | AssistantMessage
-    | ToolMessage;
-
-
-export interface SystemMessage {
-    role: "system";
-    content: string;
-}
-
-
-export interface UserMessage {
-    role: "user";
-    content: string;
-}
-
-
-export interface AssistantMessage {
-    role: "assistant";
-    content: string;
-}
-
-
-export interface ToolMessage {
-    role: "tool";
-    content: string;
-    tool_call_id: string;
-
-}
+export type { Message };
 
 export interface ChatRequest {
     messages: Message[];
