@@ -61,6 +61,21 @@ export interface ModelConfig {
   isDefault: boolean;
 }
 
+// MCP 服务器配置（工具来源）
+export type McpTransport = "stdio" | "sse" | "http";
+
+export interface McpServerConfig {
+  id: string;
+  name: string;
+  transport: McpTransport;
+  command?: string | null; // stdio
+  args?: string[]; // stdio
+  url?: string | null; // sse / http
+  enabled: boolean;
+  autoApprove?: string[];
+  createdAt?: number;
+}
+
 // 对话默认设置（全局，新会话继承）
 export interface ChatDefaults {
   modelId: string;

@@ -29,10 +29,15 @@ import {
   deleteConversation,
   sendChat,
   type ConversationSummary,
+  type AgentStep,
 } from "@/api/chat";
 import { http } from "@/api/http";
 import type { ChatMessage, MemoryItem, ModelConfig } from "@/api/types";
 import MemoryPanel from "@/components/config/MemoryPanel";
+import ChatSteps from "@/components/ChatSteps";
+
+// 消息附带可选的执行轨迹
+type ChatMessageWithSteps = ChatMessage & { steps?: AgentStep[] };
 
 const SUGGESTIONS = [
   "帮我总结一下这份产品文档",
@@ -49,7 +54,7 @@ export default function ChatPage() {
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessageWithSteps[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -123,11 +128,12 @@ export default function ChatPage() {
         conversationId: activeId ?? undefined,
         modelId,
       });
-      const reply: ChatMessage = {
+      const reply: ChatMessageWithSteps = {
         id: `reply-${Date.now()}`,
         role: "assistant",
         content: res.reply,
         createdAt: Date.now(),
+        steps: res.steps,
       };
       setMessages((prev) => [...prev, reply]);
       if (!activeId) setActiveId(res.conversationId);
@@ -288,6 +294,9 @@ export default function ChatPage() {
                       {m.role === "user" ? user?.displayName : "AI Agent"}
                     </div>
                     <div className={`chat-bubble ${m.role}`}>{m.content}</div>
+                    {m.role === "assistant" && m.steps && m.steps.length > 0 && (
+                      <ChatSteps steps={m.steps} />
+                    )}
                   </div>
                 </div>
               ))}

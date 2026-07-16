@@ -81,6 +81,20 @@ model Conversation {
   @@index([userId])
 }
 
+// MCP 服务器配置（工具来源，注册进 Agent 的工具表）
+model McpServer {
+  id          String   @id @default(uuid())
+  name        String   @unique // 作为工具名前缀，需唯一
+  transport   String // stdio / sse / http
+  command     String? // stdio
+  args        Json? // stdio 参数数组
+  url         String? // sse / http
+  enabled     Boolean  @default(true)
+  autoApprove Json? // 免确认的工具名数组
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // Agent 全局记忆（对所有用户、所有对话生效）
 model AgentMemory {
   id        String   @id @default(uuid())

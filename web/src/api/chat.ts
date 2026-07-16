@@ -16,10 +16,21 @@ export interface ConversationDetail {
   messages: ChatMessage[];
 }
 
+// Agent 执行步骤（与后端 AgentStep 对应）
+export type AgentStep =
+  | { type: "memory_extracted"; items: { key: string; value: string }[]; ts: number }
+  | { type: "memory_injected"; scope: "user" | "agent"; count: number; ts: number }
+  | { type: "llm_request"; round: number; tools: string[]; ts: number }
+  | { type: "llm_response"; round: number; hasToolCalls: boolean; content: string; ts: number }
+  | { type: "tool_call"; name: string; arguments: string; ts: number }
+  | { type: "tool_result"; name: string; ok: boolean; preview: string; ts: number }
+  | { type: "final"; content: string; ts: number };
+
 export interface SendChatResult {
   conversationId: string;
   reply: string;
   modelId: string | null;
+  steps?: AgentStep[];
 }
 
 export async function listConversations(): Promise<ConversationSummary[]> {

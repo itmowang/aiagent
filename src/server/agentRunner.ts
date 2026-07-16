@@ -5,8 +5,8 @@ import { createToolRegistry } from "../tool";
 import { createToolRuntime } from "../runtime";
 import { createPrismaMemory, createMemoryExtractor } from "../memory";
 import { createAgent } from "../agent";
-import { createKnowledgeTool } from "../tool/ragTool";
-import { searchKnowledge } from "./ragService";
+import { registerAgentTools } from "./toolsService";
+import type { AgentStep } from "../agent/types";
 
 // 根据 ModelConfig 行构造 LLM 配置
 function toLLMConfig(model: {
@@ -57,6 +57,7 @@ export interface RunChatResult {
     conversationId: string;
     reply: string;
     modelId: string | null;
+    steps: AgentStep[];
 }
 
 export async function runChat(input: RunChatInput): Promise<RunChatResult> {
@@ -95,12 +96,8 @@ export async function runChat(input: RunChatInput): Promise<RunChatResult> {
     const memory = createPrismaMemory({ userId });
     const extractor = createMemoryExtractor(llm);
 
-    // 注册知识库检索工具（底层复用 RAG 服务；Qdrant 不可用时工具会返回错误，不影响对话）
-    registry.register(
-        createKnowledgeTool({
-            search: (query: string, limit = 5) => searchKnowledge(query, limit),
-        })
-    );
+    // 注册所有工具：内置知识库工具 + 启用的 MCP 服务工具
+    await registerAgentTools(registry);
 
     // 4. 预加载历史消息作为上下文
     const history = await prisma.message.findMany({
@@ -113,6 +110,9 @@ export async function runChat(input: RunChatInput): Promise<RunChatResult> {
         else if (m.role === "system") conversation.addSystem(m.content);
     }
 
+    // 收集执行步骤（返回给前端展示轨迹）
+    const steps: AgentStep[] = [];
+
     // 注入 Agent 全局记忆（对所有用户生效），与用户个人记忆一起作为上下文
     const agentMemories = await prisma.agentMemory.findMany({
         orderBy: { createdAt: "asc" },
@@ -122,6 +122,12 @@ export async function runChat(input: RunChatInput): Promise<RunChatResult> {
             .map((m) => `${m.key}:${m.value}`)
             .join("\n");
         conversation.addSystem(`Agent 全局记忆:\n${text}`);
+        steps.push({
+            type: "memory_injected",
+            scope: "agent",
+            count: agentMemories.length,
+            ts: Date.now(),
+        });
     }
 
     // 5. 运行 agent
@@ -132,6 +138,7 @@ export async function runChat(input: RunChatInput): Promise<RunChatResult> {
         registry,
         memory,
         extractor,
+        onEvent: (e) => steps.push({ ...e, ts: Date.now() }),
     });
     const reply = await agent.run(message);
 
@@ -147,5 +154,5 @@ export async function runChat(input: RunChatInput): Promise<RunChatResult> {
         data: { updatedAt: new Date(), modelId },
     });
 
-    return { conversationId, reply: reply ?? "", modelId: model.id };
+    return { conversationId, reply: reply ?? "", modelId: model.id, steps };
 }

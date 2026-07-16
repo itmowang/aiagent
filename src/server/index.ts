@@ -12,6 +12,8 @@ import { conversationRoutes } from "./routes/conversations";
 import { chatRoutes } from "./routes/chat";
 import { ragRoutes } from "./routes/rag";
 import { agentMemoryRoutes } from "./routes/agentMemory";
+import { mcpRoutes } from "./routes/mcp";
+import { toolRoutes } from "./routes/tools";
 
 const app = new Hono<AppEnv>();
 
@@ -33,6 +35,8 @@ app.route("/api/conversations", conversationRoutes);
 app.route("/api/chat", chatRoutes);
 app.route("/api/rag", ragRoutes);
 app.route("/api/agent-memory", agentMemoryRoutes);
+app.route("/api/mcp", mcpRoutes);
+app.route("/api/tools", toolRoutes);
 
 const port = Number(process.env["PORT"] ?? 8787);
 
