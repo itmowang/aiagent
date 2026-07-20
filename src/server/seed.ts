@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { hashPassword } from "./auth";
+import { seedBuiltinSkills } from "../skill";
 
 // 首次启动写入默认管理员和默认模型
 export async function ensureSeed() {
@@ -34,4 +35,7 @@ export async function ensureSeed() {
         });
         console.log("[seed] 已创建默认模型 通义千问 Plus");
     }
+
+    // 内置技能落库（便于后台开关管理）
+    await seedBuiltinSkills();
 }

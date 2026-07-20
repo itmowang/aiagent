@@ -14,12 +14,15 @@ interface AgentOptions {
     extractor: MemoryExtractor;
     // 可选：接收执行过程中的步骤事件（用于前端展示轨迹 / 日志）
     onEvent?: AgentEventHandler;
+    // 最大轮次，防止工具/技能反复调用陷入死循环
+    maxRounds?: number;
 }
 
 
 export function createAgent(options: AgentOptions) {
     const { llm, conversation, runtime, registry, memory, extractor } = options;
     const emit: AgentEventHandler = options.onEvent ?? (() => {});
+    const maxRounds = options.maxRounds ?? 12;
 
     let status = "idle";
 
@@ -52,6 +55,15 @@ export function createAgent(options: AgentOptions) {
         while (true) {
             status = "thinking";
             round += 1;
+
+            // 超过最大轮次，强制收尾，避免死循环
+            if (round > maxRounds) {
+                status = "completed";
+                const fallback = "（已达到最大处理轮次，提前结束）";
+                conversation.addAssistant(fallback);
+                emit({ type: "final", content: fallback });
+                return fallback;
+            }
             const tools = registry.list();
             emit({ type: "llm_request", round, tools: tools.map((t) => t.name) });
 

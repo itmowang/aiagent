@@ -11,6 +11,7 @@ import {
   ThunderboltOutlined,
   ApiOutlined,
   ToolOutlined,
+  BulbOutlined,
 } from "@ant-design/icons";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/store/AuthContext";
@@ -28,6 +29,7 @@ export default function AdminLayout() {
     if (p.startsWith("/admin/agent-memory")) return "/admin/agent-memory";
     if (p.startsWith("/admin/rag")) return "/admin/rag";
     if (p.startsWith("/admin/models")) return "/admin/models";
+    if (p.startsWith("/admin/skills")) return "/admin/skills";
     if (p.startsWith("/admin/mcp")) return "/admin/mcp";
     if (p.startsWith("/admin/tools")) return "/admin/tools";
     if (p.startsWith("/admin/chat-defaults")) return "/admin/chat-defaults";
@@ -80,6 +82,11 @@ export default function AdminLayout() {
                   key: "/admin/models",
                   icon: <ThunderboltOutlined />,
                   label: "模型配置",
+                },
+                {
+                  key: "/admin/skills",
+                  icon: <BulbOutlined />,
+                  label: "技能配置",
                 },
                 {
                   key: "/admin/mcp",

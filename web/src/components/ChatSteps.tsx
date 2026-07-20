@@ -8,6 +8,7 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   FlagOutlined,
+  AimOutlined,
 } from "@ant-design/icons";
 import type { AgentStep } from "@/api/chat";
 
@@ -61,6 +62,13 @@ function renderStep(step: AgentStep) {
         dot: step.ok ? <CheckCircleOutlined /> : <CloseCircleOutlined />,
         title: `工具 ${step.name} ${step.ok ? "返回" : "失败"}`,
         detail: step.preview,
+      };
+    case "skill_activated":
+      return {
+        color: "purple",
+        dot: <AimOutlined />,
+        title: `激活技能：${step.name}`,
+        detail: step.tools.length > 0 ? `新增工具：${step.tools.join("、")}` : "",
       };
     case "final":
       return {

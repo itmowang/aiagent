@@ -8,6 +8,7 @@ export type AgentEvent =
     | { type: "llm_response"; round: number; hasToolCalls: boolean; content: string }
     | { type: "tool_call"; name: string; arguments: string }
     | { type: "tool_result"; name: string; ok: boolean; preview: string }
+    | { type: "skill_activated"; name: string; tools: string[] }
     | { type: "final"; content: string };
 
 export type AgentEventHandler = (event: AgentEvent) => void;

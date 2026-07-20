@@ -81,6 +81,20 @@ model Conversation {
   @@index([userId])
 }
 
+// Skill 技能（能力包：一段提示词 + 可激活的工具，由 Agent 通过 use_skill 自主调用）
+model Skill {
+  id           String   @id @default(uuid())
+  key          String   @unique // 稳定标识，内置技能固定 key，自定义技能自动生成
+  name         String
+  description  String   @db.Text
+  systemPrompt String   @db.Text
+  toolNames    Json? // 自定义技能引用的工具名（内置技能的工具在代码里）
+  builtin      Boolean  @default(false)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 // MCP 服务器配置（工具来源，注册进 Agent 的工具表）
 model McpServer {
   id          String   @id @default(uuid())

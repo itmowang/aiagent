@@ -24,6 +24,7 @@ export type AgentStep =
   | { type: "llm_response"; round: number; hasToolCalls: boolean; content: string; ts: number }
   | { type: "tool_call"; name: string; arguments: string; ts: number }
   | { type: "tool_result"; name: string; ok: boolean; preview: string; ts: number }
+  | { type: "skill_activated"; name: string; tools: string[]; ts: number }
   | { type: "final"; content: string; ts: number };
 
 export interface SendChatResult {

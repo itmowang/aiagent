@@ -12,6 +12,7 @@ import RagPage from "./pages/admin/Rag";
 import ModelsPage from "./pages/admin/Models";
 import McpPage from "./pages/admin/Mcp";
 import ToolsPage from "./pages/admin/Tools";
+import SkillsPage from "./pages/admin/Skills";
 import type { JSX } from "react";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="agent-memory" element={<AgentMemoryPage />} />
         <Route path="rag" element={<RagPage />} />
         <Route path="models" element={<ModelsPage />} />
+        <Route path="skills" element={<SkillsPage />} />
         <Route path="mcp" element={<McpPage />} />
         <Route path="tools" element={<ToolsPage />} />
         <Route path="chat-defaults" element={<ChatDefaultsPage />} />
