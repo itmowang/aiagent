@@ -64,6 +64,9 @@ export interface RunChatResult {
 export async function runChat(input: RunChatInput): Promise<RunChatResult> {
     const { userId, message } = input;
 
+    // 记录用户发问时刻，用于持久化时保证 user 消息早于 assistant 回复
+    const userMessageAt = new Date();
+
     // 1. 找到或创建会话
     let conversationId = input.conversationId;
     let modelId = input.modelId ?? null;
@@ -149,10 +152,25 @@ export async function runChat(input: RunChatInput): Promise<RunChatResult> {
     const reply = await agent.run(message);
 
     // 6. 持久化本轮用户消息与助手回复
+    // 显式设置 createdAt：user 用发问时刻，assistant 用回复完成时刻，
+    // 并兜底保证 assistant 严格晚于 user，避免同一时刻导致历史消息排序颠倒。
+    const assistantMessageAt = new Date(
+        Math.max(Date.now(), userMessageAt.getTime() + 1)
+    );
     await prisma.message.createMany({
         data: [
-            { conversationId, role: "user", content: message },
-            { conversationId, role: "assistant", content: reply ?? "" },
+            {
+                conversationId,
+                role: "user",
+                content: message,
+                createdAt: userMessageAt,
+            },
+            {
+                conversationId,
+                role: "assistant",
+                content: reply ?? "",
+                createdAt: assistantMessageAt,
+            },
         ],
     });
     await prisma.conversation.update({
